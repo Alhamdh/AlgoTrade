@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Algorithmic Trading – MA Crossover Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #38bdf8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 0.95rem; }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      background: var(--card);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+    .control-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .control-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      background: #0f172a;
+      color: var(--text);
+      font-size: 1rem;
+    }
+    .control-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    button {
+      grid-column: 1 / -1;
+      padding: 14px;
+      background: linear-gradient(90deg, #0ea5e9, #6366f1);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card);
+      padding: 16px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--muted); }
+    .stat-card .value { font-size: 1.4rem; font-weight: 700; margin-top: 4px; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .chart-container {
+      background: var(--card);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      height: 420px;
+    }
+    .trades {
+      background: var(--card);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .trades h2 {
+      padding: 16px 20px;
+      font-size: 1.1rem;
+      border-bottom: 1px solid #334155;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #334155;
+    }
+    th { color: var(--muted); font-weight: 500; }
+    .buy { color: var(--green); }
+    .sell { color: var(--red); }
+    .empty { padding: 40px; text-align: center; color: var(--muted); }
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Algorithmic Trading Demo</h1>
+    <p class="subtitle">Simple Moving Average Crossover Strategy on Simulated Data</p>
+
+    <div class="controls">
+      <div class="control-group">
+        <label>Initial Capital ($)</label>
+        <input type="number" id="capital" value="10000" min="1000" step="1000">
+      </div>
+      <div class="control-group">
+        <label>Short MA Period</label>
+        <input type="number" id="shortMA" value="10" min="2" max="50">
+      </div>
+      <div class="control-group">
+        <label>Long MA Period</label>
+        <input type="number" id="longMA" value="30" min="5" max="100">
+      </div>
+      <div class="control-group">
+        <label>Number of Days</label>
+        <input type="number" id="days" value="250" min="50" max="1000">
+      </div>
+      <div class="control-group">
+        <label>Volatility (%)</label>
+        <input type="number" id="volatility" value="1.5" min="0.5" max="5" step="0.1">
+      </div>
+      <button id="runBtn">Run Strategy</button>
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat-card">
+        <div class="label">Final Equity</div>
+        <div class="value" id="finalEquity">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Return</div>
+        <div class="value" id="totalReturn">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Trades</div>
+        <div class="value" id="totalTrades">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Win Rate</div>
+        <div class="value" id="winRate">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Max Drawdown</div>
+        <div class="value" id="maxDD">—</div>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="priceChart"></canvas>
+    </div>
+
+    <div class="trades">
+      <h2>Trade Log</h2>
+      <div id="tradeTable">
+        <div class="empty">Run the strategy to see trades</div>
+      </div>
+    </div>
+
+    <footer>
+      Educational demo only • Not financial advice • Past performance ≠ future results
+    </footer>
+  </div>
+
+  <script>
+    let chart = null;
+
+    function generatePrices(days, volatility) {
+      const prices = [100];
+      const vol = volatility / 100;
+      for (let i = 1; i < days; i++) {
+        const change = (Math.random() - 0.48) * vol * prices[i - 1] * 2;
+        prices.push(Math.max(1, prices[i - 1] + change));
+      }
+      return prices;
+    }
+
+    function calculateMA(prices, period) {
+      const ma = [];
+      for (let i = 0; i < prices.length; i++) {
+        if (i < period - 1) {
+          ma.push(null);
+        } else {
+          const sum = prices.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+          ma.push(sum / period);
+        }
+      }
+      return ma;
+    }
+
+    function runStrategy() {
+      const capital = parseFloat(document.getElementById('capital').value);
+      const shortPeriod = parseInt(document.getElementById('shortMA').value);
+      const longPeriod = parseInt(document.getElementById('longMA').value);
+      const days = parseInt(document.getElementById('days').value);
+      const volatility = parseFloat(document.getElementById('volatility').value);
+
+      if (shortPeriod >= longPeriod) {
+        alert('Short MA period must be less than Long MA period');
+        return;
+      }
+
+      const prices = generatePrices(days, volatility);
+      const shortMA = calculateMA(prices, shortPeriod);
+      const longMA = calculateMA(prices, longPeriod);
+
+      // Generate signals & simulate trades
+      let cash = capital;
+      let shares = 0;
+      let position = 0; // 0 = flat, 1 = long
+      const trades = [];
+      const equity = [];
+      let peak = capital;
+      let maxDrawdown = 0;
+      let wins = 0;
+      let totalClosedTrades = 0;
+
+      for (let i = 0; i < prices.length; i++) {
+        const price = prices[i];
+        const sMA = shortMA[i];
+        const lMA = longMA[i];
+
+        // Current equity
+        const currentEquity = cash + shares * price;
+        equity.push(currentEquity);
+        if (currentEquity > peak) peak = currentEquity;
+        const dd = (peak - currentEquity) / peak * 100;
+        if (dd > maxDrawdown) maxDrawdown = dd;
+
+        if (sMA === null || lMA === null) continue;
+
+        // Golden cross → Buy
+        if (sMA > lMA && position === 0) {
+          shares = Math.floor(cash / price);
+          if (shares > 0) {
+            const cost = shares * price;
+            cash -= cost;
+            position = 1;
+            trades.push({
+              day: i + 1,
+              type: 'BUY',
+              price: price.toFixed(2),
+              shares,
+              value: cost.toFixed(2)
+            });
+          }
+        }
+        // Death cross → Sell
+        else if (sMA < lMA && position === 1) {
+          const proceeds = shares * price;
+          const entry = trades[trades.length - 1];
+          const pnl = proceeds - parseFloat(entry.value);
+          if (pnl > 0) wins++;
+          totalClosedTrades++;
+
+          cash += proceeds;
+          trades.push({
+            day: i + 1,
+            type: 'SELL',
+            price: price.toFixed(2),
+            shares,
+            value: proceeds.toFixed(2),
+            pnl: pnl.toFixed(2)
+          });
+          shares = 0;
+          position = 0;
+        }
+      }
+
+      // Close any open position at the end
+      if (position === 1) {
+        const proceeds = shares * prices[prices.length - 1];
+        const entry = trades[trades.length - 1];
+        const pnl = proceeds - parseFloat(entry.value);
+        if (pnl > 0) wins++;
+        totalClosedTrades++;
+        cash += proceeds;
+        trades.push({
+          day: prices.length,
+          type: 'SELL (Close)',
+          price: prices[prices.length - 1].toFixed(2),
+          shares,
+          value: proceeds.toFixed(2),
+          pnl: pnl.toFixed(2)
+        });
+        shares = 0;
+      }
+
+      const finalEquity = cash;
+      const totalReturn = ((finalEquity - capital) / capital * 100);
+      const winRate = totalClosedTrades > 0 ? (wins / totalClosedTrades * 100) : 0;
+
+      // Update stats
+      document.getElementById('finalEquity').textContent = '$' + finalEquity.toFixed(2);
+      document.getElementById('finalEquity').className = 'value ' + (totalReturn >= 0 ? 'positive' : 'negative');
+      document.getElementById('totalReturn').textContent = totalReturn.toFixed(2) + '%';
+      document.getElementById('totalReturn').className = 'value ' + (totalReturn >= 0 ? 'positive' : 'negative');
+      document.getElementById('totalTrades').textContent = trades.length;
+      document.getElementById('winRate').textContent = winRate.toFixed(1) + '%';
+      document.getElementById('maxDD').textContent = maxDrawdown.toFixed(2) + '%';
+      document.getElementById('maxDD').className = 'value negative';
+
+      // Update trade table
+      if (trades.length === 0) {
+        document.getElementById('tradeTable').innerHTML = '<div class="empty">No trades generated</div>';
+      } else {
+        let html = `<table>
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Type</th>
+              <th>Price</th>
+              <th>Shares</th>
+              <th>Value</th>
+              <th>P&L</th>
+            </tr>
+          </thead>
+          <tbody>`;
+        trades.forEach(t => {
+          html += `<tr>
+            <td>${t.day}</td>
+            <td class="${t.type.startsWith('BUY') ? 'buy' : 'sell'}">${t.type}</td>
+            <td>$${t.price}</td>
+            <td>${t.shares}</td>
+            <td>$${t.value}</td>
+            <td class="${t.pnl && parseFloat(t.pnl) >= 0 ? 'positive' : 'negative'}">${t.pnl ? '$' + t.pnl : '—'}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        document.getElementById('tradeTable').innerHTML = html;
+      }
+
+      // Chart
+      const labels = prices.map((_, i) => i + 1);
+      const buyPoints = trades.filter(t => t.type.startsWith('BUY')).map(t => ({ x: t.day, y: parseFloat(t.price) }));
+      const sellPoints = trades.filter(t => t.type.startsWith('SELL')).map(t => ({ x: t.day, y: parseFloat(t.price) }));
+
+      if (chart) chart.destroy();
+
+      const ctx = document.getElementById('priceChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Price',
+              data: prices,
+              borderColor: '#94a3b8',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            {
+              label: `MA ${shortPeriod}`,
+              data: shortMA,
+              borderColor: '#38bdf8',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            {
+              label: `MA ${longPeriod}`,
+              data: longMA,
+              borderColor: '#f97316',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            {
+              label: 'Buy',
+              data: buyPoints,
+              type: 'scatter',
+              backgroundColor: '#22c55e',
+              pointRadius: 6,
+              pointStyle: 'triangle'
+            },
+            {
+              label: 'Sell',
+              data: sellPoints,
+              type: 'scatter',
+              backgroundColor: '#ef4444',
+              pointRadius: 6,
+              pointStyle: 'triangle',
+              rotation: 180
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { color: '#e2e8f0' } },
+            tooltip: {
+              backgroundColor: '#1e293b',
+              titleColor: '#e2e8f0',
+              bodyColor: '#e2e8f0'
+            }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: 'Day', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: '#334155' }
+            },
+            y: {
+              title: { display: true, text: 'Price ($)', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: '#334155' }
+            }
+          }
+        }
+      });
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runStrategy);
+
+    // Run once on load
+    runStrategy();
+  </script>
+</body>
+</html>
